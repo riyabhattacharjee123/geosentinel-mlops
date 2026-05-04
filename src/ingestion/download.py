@@ -7,7 +7,7 @@ import os
 import requests
 from pathlib import Path
 from tqdm import tqdm
-from auth import get_access_token
+from src.ingestion.auth import get_access_token
 
 RAW_DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "raw"
 ODATA_DOWNLOAD_URL = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
