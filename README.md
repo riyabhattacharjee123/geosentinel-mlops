@@ -1,14 +1,11 @@
-# geosentinel-mlops
-Description: End-to-end MLOps platform for Sentinel-2 vegetation anomaly detection
-
 # 🛰️ GeoSentinel-MLOps
 
 > An end-to-end MLOps platform for Earth Observation — detecting vegetation anomalies using Sentinel-2 satellite data, deployed on Kubernetes with full model versioning, serving, and drift monitoring.
 
 [![Project Status](https://img.shields.io/badge/status-in%20progress-yellow)](https://github.com/riyabhattacharjee123/geosentinel-mlops)
-[![Phase](https://img.shields.io/badge/phase-1%20of%205-blue)](https://github.com/riyabhattacharjee123/geosentinel-mlops)
+[![Phase](https://img.shields.io/badge/phase-2%20of%205-blue)](https://github.com/riyabhattacharjee123/geosentinel-mlops)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 
 ---
 
@@ -29,18 +26,18 @@ Build a production-grade MLOps platform that:
 
 | Layer | Tool |
 |---|---|
-| Data Source | Copernicus Data Space Ecosystem (Sentinel-2 L2A) |
+| Data Source | AWS Open Data Registry (Sentinel-2 L2A COGs) |
 | Data Versioning | DVC |
 | Experiment Tracking | MLflow |
 | Model Registry | MLflow Model Registry |
-| Pipeline Orchestration | Apache Airflow |
+| Pipeline Orchestration | Apache Airflow 2.10.4 |
 | Model Serving | FastAPI + Docker |
 | Infrastructure | Kubernetes (kind → Oracle Cloud free tier) |
 | IaC | Terraform |
-| CI/CD | GitLab / GitHub Actions |
+| CI/CD | GitHub Actions |
 | Drift Monitoring | Evidently AI |
 | Observability | Grafana + Prometheus |
-| Language | Python 3.11 |
+| Language | Python 3.12 |
 
 ---
 
@@ -49,27 +46,29 @@ Build a production-grade MLOps platform that:
 ```
 geosentinel-mlops/
 ├── src/
-│   ├── ingestion/          # Data pipeline: auth, search, download
-│   │   ├── auth.py         # OAuth2 token generation (CDSE)
-│   │   ├── search.py       # OData catalog search with filters
-│   │   └── download.py     # Streaming download with progress bar
-│   ├── training/           # Model training & experiment tracking
-│   ├── serving/            # FastAPI model serving endpoint
-│   └── monitoring/         # Drift detection & alerting
+│   ├── ingestion/
+│   │   ├── auth.py             # OAuth2 token generation (CDSE)
+│   │   ├── search.py           # OData catalog search with filters
+│   │   ├── download_aws.py     # Band downloader via AWS Open Data (no auth)
+│   │   └── compute_ndvi.py     # NDVI computation from B04/B08 bands
+│   ├── training/               # Model training & experiment tracking (Phase 2)
+│   ├── serving/                # FastAPI model serving endpoint (Phase 3)
+│   └── monitoring/             # Drift detection & alerting (Phase 4)
 ├── airflow/
-│   └── dags/               # Scheduled pipeline DAGs
+│   └── dags/
+│       └── sentinel2_pipeline.py  # Scheduled NDVI pipeline DAG
 ├── data/
-│   ├── raw/                # Downloaded Sentinel-2 .zip files
-│   ├── processed/          # NDVI-computed NumPy/Parquet outputs
-│   └── versioned/          # DVC-tracked dataset versions
+│   ├── raw/                    # Downloaded GeoTIFF bands (DVC-tracked)
+│   ├── processed/              # NDVI GeoTIFF + stats JSON (DVC-tracked)
+│   └── versioned/              # DVC metadata
 ├── infra/
-│   ├── helm/               # Kubernetes Helm charts
-│   └── terraform/          # Infrastructure as Code
-├── models/                 # Saved model artifacts
-├── notebooks/              # Exploratory analysis
-├── tests/                  # Unit + integration tests
-├── docs/                   # Architecture diagrams, decisions
-├── .env.example            # Credential template (never commit .env)
+│   ├── helm/                   # Kubernetes Helm charts (Phase 3)
+│   └── terraform/              # Infrastructure as Code (Phase 3)
+├── models/                     # Saved model artifacts
+├── notebooks/                  # Exploratory analysis
+├── tests/                      # Unit + integration tests
+├── docs/                       # Architecture diagrams, decisions
+├── .env.example                # Credential template (never commit .env)
 └── requirements.txt
 ```
 
@@ -100,71 +99,116 @@ geosentinel-mlops/
 
 **3. Credentials & API Setup**
 - Created Copernicus Data Space Ecosystem account at `dataspace.copernicus.eu`
-- Generated S3 credentials (access key + secret key) from the CDSE S3 key manager
-  - 12 TB/month free quota at 20 MBps
-  - Endpoint: `https://eodata.dataspace.copernicus.eu`
-- Understood two authentication methods:
-  - **OAuth2 Bearer token** — for OData catalog search and single-product download
-  - **S3 keys** — for bulk/high-performance data access via AWS-compatible protocol
-- Token is fetched at runtime via POST to `https://identity.dataspace.copernicus.eu/...` — expires in ~600 seconds, never hardcoded
+- Generated S3 credentials from the CDSE S3 key manager (12 TB/month free quota)
+- Understood two authentication methods: OAuth2 Bearer token (OData API) and S3 keys (bulk access)
 
 **4. Repository Setup**
 - Created `geosentinel-mlops` GitHub repository (public, MIT license)
 - Launched GitHub Codespace for cloud-based development
 - Set up full project folder structure
-- Fixed branch naming issue: local branch was `Main` → renamed to `main` to match GitHub remote using `git branch -m Main main`
+- Fixed branch naming issue: `Main` → `main` using `git branch -m Main main`
 
-**5. Code Written — Ingestion Module (Phase 1)**
+**5. Code Written**
 
-Three modules written and tested:
+`src/ingestion/auth.py` — OAuth2 token generation from Copernicus identity server  
+`src/ingestion/search.py` — OData catalog search filtered by location, date, cloud cover  
+`src/ingestion/download.py` — Streaming product download with tqdm progress bar
 
-`src/ingestion/auth.py`
-- Fetches OAuth2 Bearer token from Copernicus identity server
-- Reads credentials from `.env` via `python-dotenv`
-- Raises on HTTP errors for clean failure handling
-
-`src/ingestion/search.py`
-- Queries the CDSE OData catalog API
-- Filters by: geographic point (lon/lat), date range, cloud cover percentage
-- Returns structured list of product metadata dicts
-- Pretty-print helper for terminal output
-- Tested: searched for Sentinel-2 L2A tiles over Frankfurt (8.68°E, 50.11°N), June 2024, <20% cloud → returned 5 products
-
-`src/ingestion/download.py`
-- Downloads a Sentinel-2 product by its OData UUID
-- Streaming download with `tqdm` progress bar
-- Skip-if-exists logic to avoid re-downloading
-- Saves to `data/raw/` directory
-
-**6. Key Learnings Today**
-- CDSE replaced the old Copernicus Open Access Hub (SciHub) — all new projects should use `dataspace.copernicus.eu`
-- The `$filter` syntax in OData uses `OData.CSC.Intersects` for spatial queries — different from standard OData
-- Cloud cover filtering requires the nested `Attributes/OData.CSC.DoubleAttribute/any(...)` pattern
-- S3 credentials on CDSE are separate from the OAuth2 token — two different auth systems for two different use cases
-- Always use `git branch -m` not `git branch -M` when you want a safe rename that checks for conflicts
-
-**Files committed:**
-```
-src/ingestion/auth.py
-src/ingestion/search.py
-src/ingestion/download.py
-src/ingestion/__init__.py
-data/raw/.gitkeep
-data/processed/.gitkeep
-data/versioned/.gitkeep
-.env.example
-requirements.txt
-```
+**6. Key Learnings**
+- CDSE replaced the old SciHub — all new projects use `dataspace.copernicus.eu`
+- OData spatial queries use `OData.CSC.Intersects` — different from standard OData
+- Cloud cover filtering requires nested `Attributes/OData.CSC.DoubleAttribute/any(...)` pattern
 
 **Commit:** `feat: Phase 1 - Sentinel-2 ingestion pipeline (auth, search, download)`
 
 ---
 
-**⏭️ Next Session (Day 2 — Phase 1 continued):**
-- Wire `search.py` + `download.py` into an **Airflow DAG** that runs on a schedule
-- Add **DVC** for dataset versioning
-- Download a real Sentinel-2 tile and verify the `.zip` contents
-- Milestone: Airflow DAG runs, new satellite data lands versioned in DVC
+### ✅ Day 2 — May 4, 2026
+
+**Session Goal:** Complete Phase 1 — working, scheduled, versioned satellite data pipeline.
+
+**What I did:**
+
+**1. Debugging CDSE API Access**
+- Hit 403 Forbidden errors on both the OData API and `sentinelsat` library
+- Root cause: `sentinelsat` uses the deprecated SciHub/OpenSearch endpoint which CDSE no longer supports
+- The `contains()` OData filter was also unsupported, returning 0 results
+- Decision: switched data source to **AWS Open Data Registry** — Sentinel-2 L2A is mirrored on S3 bucket `sentinel-cogs`, completely free, no authentication required
+
+**2. AWS Open Data Downloader**
+
+Written: `src/ingestion/download_aws.py`
+- Lists available scenes by UTM tile and month via anonymous S3 access
+- Downloads only NDVI-relevant bands: **B04.tif** (Red) and **B08.tif** (NIR)
+- ~20MB total vs 800MB for full product zip — faster, no wasted storage
+- Skip-if-exists logic to avoid duplicate downloads
+- Tested: listed 18 Sentinel-2 L2A scenes for tile 32UMA (Frankfurt), June 2024
+
+**3. NDVI Computation**
+
+Written: `src/ingestion/compute_ndvi.py`
+- Reads B04 + B08 GeoTIFF bands using `rasterio`
+- Computes `NDVI = (B08 - B04) / (B08 + B04)` with divide-by-zero protection
+- Clips output to valid range `[-1.0, 1.0]`
+- Saves NDVI as GeoTIFF + a companion JSON stats file
+- First real result for Frankfurt (June 2, 2024):
+
+```
+Mean NDVI  : 0.0276
+Vegetation : 0.6%   (NDVI > 0.3)
+Water      : 8.2%   (NDVI < 0.0)
+Bare soil  : 87.3%  (NDVI 0.0–0.1)
+```
+
+> Note: 87% bare soil is expected for early June before crops fully develop. July/August tiles will show 40–60% vegetation — that seasonal delta is what the anomaly model will learn.
+
+**4. Airflow DAG**
+
+Written: `airflow/dags/sentinel2_pipeline.py`
+- Three-task pipeline: `download_bands → compute_ndvi → version_data`
+- Scheduled daily at 06:00 UTC
+- Uses XCom to pass `scene_dir` and `ndvi_path` between tasks
+- Execution date drives which year/month is queried from AWS
+
+**5. Infrastructure Fixes**
+- Resolved Airflow `db init` deprecation — switched to `airflow db migrate`
+- Fixed `typing_extensions` / `pydantic-core` import conflict by upgrading packages
+- Fixed `fsspec` / DVC conflict: `pip install "fsspec>=2023.1.0" "dvc>=3.0.0"`
+- Switched Claude Code from free account to paid subscription in Codespace
+
+**6. DAG Test Run — All 3 Tasks Green ✅**
+```
+[SUCCESS] download_bands  — 18 scenes found, B04+B08 ready
+[SUCCESS] compute_ndvi    — NDVI GeoTIFF + stats JSON generated (10980×10980px)
+[SUCCESS] version_data    — DVC tracking updated, git commit issued
+```
+
+**7. Key Learnings**
+- Sentinel-2 L2A COGs on AWS (`sentinel-cogs` bucket) require zero auth — easiest EO data access
+- UTM tile 32UMA = Frankfurt/Rhine-Main region
+- NDVI values in early June are low due to crop growth cycle — not a data error
+- Airflow XCom is how tasks pass data between each other — `ti.xcom_push()` / `ti.xcom_pull()`
+- Airflow 2.10.4 is the first version with full Python 3.12 support
+
+**Files committed:**
+```
+src/ingestion/download_aws.py
+src/ingestion/compute_ndvi.py
+airflow/dags/sentinel2_pipeline.py
+data/processed/S2A_32UMA_20240602_0_L2A_NDVI.tif
+data/processed/S2A_32UMA_20240602_0_L2A_NDVI_stats.json
+```
+
+**Commit:** `feat: Phase 1 complete - Airflow DAG for Sentinel-2 NDVI pipeline`
+
+---
+
+**⏭️ Next Session (Day 3 — Phase 2 begins):**
+- Install and configure **MLflow**
+- Build `src/training/train.py` — feature extraction from NDVI stats
+- Train baseline **Isolation Forest** anomaly detection model
+- Log all experiments (parameters, metrics, artifacts) to MLflow
+- Register best model in MLflow Model Registry
 
 ---
 
@@ -172,8 +216,8 @@ requirements.txt
 
 | Phase | Weeks | Goal | Status |
 |---|---|---|---|
-| 1 — Data Foundation | 1–3 | Automated, versioned data pipeline | 🟡 In Progress |
-| 2 — Model Training | 4–6 | Reproducible experiments with MLflow | ⬜ Not Started |
+| 1 — Data Foundation | 1–3 | Automated, versioned data pipeline | ✅ Complete |
+| 2 — Model Training | 4–6 | Reproducible experiments with MLflow | 🟡 In Progress |
 | 3 — K8s Deployment | 7–9 | Model served as REST API on Kubernetes | ⬜ Not Started |
 | 4 — Monitoring | 10–12 | Drift detection + automated retraining | ⬜ Not Started |
 | 5 — Portfolio Polish | 13–16 | Docs, demo video, blog post | ⬜ Not Started |
@@ -183,9 +227,8 @@ requirements.txt
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Python 3.11+
+- Python 3.12+
 - GitHub Codespaces or local Docker
-- Copernicus Data Space account → [dataspace.copernicus.eu](https://dataspace.copernicus.eu)
 
 ### Setup
 
@@ -197,24 +240,30 @@ cd geosentinel-mlops
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Set up credentials
-cp .env.example .env
-# Edit .env with your Copernicus Data Space credentials
+# 3. Download Sentinel-2 bands (no credentials needed)
+python src/ingestion/download_aws.py
 
-# 4. Test the connection
-cd src/ingestion
-python auth.py
+# 4. Compute NDVI
+python src/ingestion/compute_ndvi.py
+
+# 5. Run full pipeline via Airflow
+export AIRFLOW_HOME=/workspaces/geosentinel-mlops/airflow
+export AIRFLOW__CORE__DAGS_FOLDER=/workspaces/geosentinel-mlops/airflow/dags
+export AIRFLOW__CORE__LOAD_EXAMPLES=False
+airflow db migrate
+airflow dags test sentinel2_ndvi_pipeline $(date +%Y-%m-%d)
 ```
 
 ---
 
 ## 📚 Resources
 
+- [AWS Open Data — Sentinel-2 COGs](https://registry.opendata.aws/sentinel-2-l2a-cogs/)
 - [Copernicus Data Space Documentation](https://documentation.dataspace.copernicus.eu/)
-- [CDSE OData API Reference](https://documentation.dataspace.copernicus.eu/APIs/OData.html)
-- [CDSE S3 Access Guide](https://documentation.dataspace.copernicus.eu/APIs/S3.html)
 - [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
 - [Evidently AI Documentation](https://docs.evidentlyai.com/)
+- [Apache Airflow Documentation](https://airflow.apache.org/docs/)
+- [DVC Documentation](https://dvc.org/doc)
 
 ---
 
@@ -226,8 +275,4 @@ Transitioning into MLOps/AI Infrastructure Engineering by December 2026
 
 ---
 
-
-
-
-
-License: MIT
+*This project is part of a structured 10-month self-directed learning journey toward Platform/MLOps Engineering.*

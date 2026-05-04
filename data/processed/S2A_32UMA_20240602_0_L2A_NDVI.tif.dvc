@@ -1,0 +1,5 @@
+outs:
+- md5: 081b9eccee33dde4b60d467ba018db7e
+  size: 348273912
+  hash: md5
+  path: S2A_32UMA_20240602_0_L2A_NDVI.tif
