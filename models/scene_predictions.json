@@ -1,0 +1,116 @@
+[
+  {
+    "scene": "S2A_32UMA_20240506_0_L2A",
+    "computed_at": "2026-05-05T09:46:04.814087",
+    "anomaly_score": 0.038783758654956424,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240510_0_L2A",
+    "computed_at": "2026-05-05T09:46:08.694484",
+    "anomaly_score": 0.04726204792498179,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240513_0_L2A",
+    "computed_at": "2026-05-05T09:46:15.745671",
+    "anomaly_score": 0.08904313668822927,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240602_0_L2A",
+    "computed_at": "2026-05-04T13:03:48.981633",
+    "anomaly_score": 0.0014936445767373963,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240605_0_L2A",
+    "computed_at": "2026-05-05T09:46:22.854232",
+    "anomaly_score": -0.006170697081231191,
+    "prediction": "anomaly"
+  },
+  {
+    "scene": "S2A_32UMA_20240609_0_L2A",
+    "computed_at": "2026-05-05T09:46:26.677029",
+    "anomaly_score": 0.07192831632486452,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240612_0_L2A",
+    "computed_at": "2026-05-05T09:46:33.494694",
+    "anomaly_score": 0.08825663548932383,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240702_0_L2A",
+    "computed_at": "2026-05-05T09:46:39.906646",
+    "anomaly_score": 0.014568625647237154,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240705_0_L2A",
+    "computed_at": "2026-05-05T09:46:44.938627",
+    "anomaly_score": 0.0006856330090256879,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240709_0_L2A",
+    "computed_at": "2026-05-05T09:46:49.876919",
+    "anomaly_score": 0.03440023147549576,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240712_0_L2A",
+    "computed_at": "2026-05-05T09:46:58.257275",
+    "anomaly_score": 0.11309257077162016,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240801_0_L2A",
+    "computed_at": "2026-05-05T09:47:04.325679",
+    "anomaly_score": 0.023122493392763843,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240804_0_L2A",
+    "computed_at": "2026-05-05T09:47:08.217008",
+    "anomaly_score": 0.004692506112367711,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240808_0_L2A",
+    "computed_at": "2026-05-05T09:47:12.027787",
+    "anomaly_score": 0.047618615801198194,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240811_0_L2A",
+    "computed_at": "2026-05-05T09:47:18.996831",
+    "anomaly_score": 0.048936636438186076,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240903_0_L2A",
+    "computed_at": "2026-05-05T09:47:24.329855",
+    "anomaly_score": 0.0599930793653336,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240907_0_L2A",
+    "computed_at": "2026-05-05T09:47:28.200639",
+    "anomaly_score": 0.04730288727509613,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240910_0_L2A",
+    "computed_at": "2026-05-05T09:47:36.336872",
+    "anomaly_score": 0.03468992883822086,
+    "prediction": "normal"
+  },
+  {
+    "scene": "S2A_32UMA_20240913_0_L2A",
+    "computed_at": "2026-05-05T09:47:40.790440",
+    "anomaly_score": 0.08382920174588854,
+    "prediction": "normal"
+  }
+]

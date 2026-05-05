@@ -1,6 +1,7 @@
 # src/ingestion/compute_ndvi.py
 """
 Compute NDVI from Sentinel-2 B04 (Red) and B08 (NIR) bands.
+Reads at reduced resolution using COG overviews to save memory.
 
 NDVI = (B08 - B04) / (B08 + B04)
 
@@ -15,13 +16,30 @@ Value interpretation:
 
 import numpy as np
 import rasterio
-from rasterio.transform import from_bounds
+from rasterio.enums import Resampling
 from pathlib import Path
 import json
 from datetime import datetime
 
 RAW_DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "raw"
 PROCESSED_DIR = Path(__file__).resolve().parents[2] / "data" / "processed"
+
+# Read at 1/10 resolution — enough for statistics, uses ~5MB instead of 460MB
+OVERVIEW_LEVEL = 10
+
+
+def read_band_downsampled(path: Path, overview_level: int) -> np.ndarray:
+    """Read a GeoTIFF band at reduced resolution using COG overviews."""
+    with rasterio.open(path) as src:
+        full_h, full_w = src.height, src.width
+        out_h = full_h // overview_level
+        out_w = full_w // overview_level
+        data = src.read(
+            1,
+            out_shape=(out_h, out_w),
+            resampling=Resampling.average,
+        ).astype("float32")
+    return data
 
 
 def compute_ndvi(scene_dir: Path, output_dir: Path = PROCESSED_DIR) -> Path:
@@ -33,7 +51,7 @@ def compute_ndvi(scene_dir: Path, output_dir: Path = PROCESSED_DIR) -> Path:
         output_dir: Where to save the NDVI output
 
     Returns:
-        Path to the output NDVI GeoTIFF
+        Path to the output NDVI stats JSON
     """
     b04_path = scene_dir / "B04.tif"
     b08_path = scene_dir / "B08.tif"
@@ -45,88 +63,61 @@ def compute_ndvi(scene_dir: Path, output_dir: Path = PROCESSED_DIR) -> Path:
 
     output_dir.mkdir(parents=True, exist_ok=True)
     scene_name = scene_dir.name
-    ndvi_path = output_dir / f"{scene_name}_NDVI.tif"
     stats_path = output_dir / f"{scene_name}_NDVI_stats.json"
+
+    if stats_path.exists():
+        print(f"  ⏭️  Stats already exist: {scene_name}")
+        return stats_path
 
     print(f"📡 Computing NDVI for: {scene_name}")
 
-    # Read bands
-    with rasterio.open(b04_path) as b04_src:
-        b04 = b04_src.read(1).astype("float32")
-        profile = b04_src.profile.copy()
-        print(f"  B04 shape: {b04.shape}  |  dtype: {b04.dtype}")
+    # Read bands at reduced resolution
+    b04 = read_band_downsampled(b04_path, OVERVIEW_LEVEL)
+    b08 = read_band_downsampled(b08_path, OVERVIEW_LEVEL)
+    print(f"  Shape: {b04.shape}  |  Memory: ~{b04.nbytes / 1e6:.1f} MB per band")
 
-    with rasterio.open(b08_path) as b08_src:
-        b08 = b08_src.read(1).astype("float32")
-        print(f"  B08 shape: {b08.shape}  |  dtype: {b08.dtype}")
-
-    # Compute NDVI — suppress divide-by-zero warnings
+    # Compute NDVI
     with np.errstate(divide="ignore", invalid="ignore"):
         ndvi = np.where(
             (b08 + b04) == 0,
-            0.0,
+            np.nan,
             (b08 - b04) / (b08 + b04),
         )
 
-    # Clip to valid range [-1, 1]
     ndvi = np.clip(ndvi, -1.0, 1.0)
+    valid = ndvi[~np.isnan(ndvi)]
 
-    # Save NDVI GeoTIFF
-    profile.update(dtype="float32", count=1, nodata=-9999)
-    with rasterio.open(ndvi_path, "w", **profile) as dst:
-        dst.write(ndvi, 1)
-
-    print(f"  ✅ NDVI saved: {ndvi_path}")
-
-    # Compute and save statistics
-    valid_pixels = ndvi[ndvi != -9999]
+    # Compute stats
     stats = {
         "scene": scene_name,
         "computed_at": datetime.utcnow().isoformat(),
-        "ndvi_min": float(np.min(valid_pixels)),
-        "ndvi_max": float(np.max(valid_pixels)),
-        "ndvi_mean": float(np.mean(valid_pixels)),
-        "ndvi_std": float(np.std(valid_pixels)),
-        "pixel_count": int(valid_pixels.size),
-        "vegetation_pct": float(np.sum(valid_pixels > 0.3) / valid_pixels.size * 100),
-        "water_pct": float(np.sum(valid_pixels < 0.0) / valid_pixels.size * 100),
-        "bare_soil_pct": float(np.sum((valid_pixels >= 0.0) & (valid_pixels < 0.1)) / valid_pixels.size * 100),
+        "resolution_factor": OVERVIEW_LEVEL,
+        "ndvi_min": float(np.min(valid)),
+        "ndvi_max": float(np.max(valid)),
+        "ndvi_mean": float(np.mean(valid)),
+        "ndvi_std": float(np.std(valid)),
+        "pixel_count": int(valid.size),
+        "vegetation_pct": float(np.sum(valid > 0.3) / valid.size * 100),
+        "water_pct": float(np.sum(valid < 0.0) / valid.size * 100),
+        "bare_soil_pct": float(np.sum((valid >= 0.0) & (valid < 0.1)) / valid.size * 100),
     }
 
-    with open(stats_path, "w") as f:
-        json.dump(stats, f, indent=2)
+    stats_path.write_text(json.dumps(stats, indent=2))
+    print(f"  ✅ Stats saved: {stats_path.name}")
+    print(f"     NDVI mean={stats['ndvi_mean']:.3f}  "
+          f"veg={stats['vegetation_pct']:.1f}%  "
+          f"water={stats['water_pct']:.1f}%  "
+          f"soil={stats['bare_soil_pct']:.1f}%")
 
-    print(f"  ✅ Stats saved: {stats_path}")
-    print_stats(stats)
-
-    return ndvi_path
-
-
-def print_stats(stats: dict) -> None:
-    """Pretty print NDVI statistics."""
-    print()
-    print("  📊 NDVI Statistics:")
-    print(f"     Mean NDVI   : {stats['ndvi_mean']:.4f}")
-    print(f"     Min / Max   : {stats['ndvi_min']:.4f} / {stats['ndvi_max']:.4f}")
-    print(f"     Std Dev     : {stats['ndvi_std']:.4f}")
-    print(f"     Vegetation  : {stats['vegetation_pct']:.1f}%  (NDVI > 0.3)")
-    print(f"     Water       : {stats['water_pct']:.1f}%  (NDVI < 0.0)")
-    print(f"     Bare soil   : {stats['bare_soil_pct']:.1f}%  (NDVI 0.0–0.1)")
-    print()
+    return stats_path
 
 
 if __name__ == "__main__":
     print("🌿 GeoSentinel - NDVI Computation")
     print("=" * 50)
-
-    # Find all scene folders in data/raw/
     scene_dirs = [d for d in RAW_DATA_DIR.iterdir() if d.is_dir()]
-
     if not scene_dirs:
         print("❌ No scene folders found in data/raw/")
-        print("   Run download_aws.py first.")
         exit(1)
-
-    print(f"Found {len(scene_dirs)} scene(s) to process:\n")
     for scene_dir in sorted(scene_dirs):
         compute_ndvi(scene_dir)
