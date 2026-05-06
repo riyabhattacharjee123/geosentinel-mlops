@@ -8,3 +8,4 @@ geopandas==0.14.3
 shapely==2.0.3
 tqdm==4.66.2
 pytest==8.0.0
+evidently==0.4.33

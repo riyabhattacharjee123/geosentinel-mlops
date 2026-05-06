@@ -5,3 +5,5 @@ pydantic==2.7.0
 mlflow==3.11.1
 scikit-learn==1.5.0
 numpy==1.26.4
+prometheus-client==0.20.0
+evidently==0.4.30
