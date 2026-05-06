@@ -352,6 +352,13 @@ curl -X POST http://localhost:8000/predict \
 }
 ```
 
+## Run end to end script
+```bash
+bash scripts/run_drift_report.sh
+bash scripts/run_full_pipeline.sh
+```
+
+
 ---
 
 ## Resources
