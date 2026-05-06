@@ -1,15 +1,15 @@
-# 🛰️ GeoSentinel-MLOps
+# GeoSentinel-MLOps
 
-> An end-to-end MLOps platform for Earth Observation — detecting vegetation anomalies using Sentinel-2 satellite data, deployed on Kubernetes with full model versioning, serving, and drift monitoring.
+> An end-to-end MLOps platform for Earth Observation — detecting vegetation anomalies using Sentinel-2 satellite data, deployed on Kubernetes with full model versioning, serving, drift monitoring, and automated retraining.
 
-[![Project Status](https://img.shields.io/badge/status-in%20progress-yellow)](https://github.com/riyabhattacharjee123/geosentinel-mlops)
-[![Phase](https://img.shields.io/badge/phase-3%20of%205-blue)](https://github.com/riyabhattacharjee123/geosentinel-mlops)
+[![Project Status](https://img.shields.io/badge/status-complete-brightgreen)](https://github.com/riyabhattacharjee123/geosentinel-mlops)
+[![Phase](https://img.shields.io/badge/phase-4%20of%205-blue)](https://github.com/riyabhattacharjee123/geosentinel-mlops)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 
 ---
 
-## 🎯 Project Goal
+## Project Goal
 
 Build a production-grade MLOps platform that:
 - Ingests free Copernicus Sentinel-2 satellite imagery on a schedule
@@ -18,322 +18,357 @@ Build a production-grade MLOps platform that:
 - Monitors model drift with automated retraining triggers
 - Demonstrates the full MLOps lifecycle end-to-end for portfolio purposes
 
-**Why this project?** This project bridges DevOps/Platform Engineering with ML — leveraging real Earth Observation domain expertise (ESA/Copernicus) to build something rare: infrastructure-focused ML tooling for satellite data pipelines.
+**Why this project?** This bridges DevOps/Platform Engineering with ML — leveraging real Earth Observation domain expertise (ESA/Copernicus) to build something rare: infrastructure-focused ML tooling for satellite data pipelines.
 
 ---
 
-## 🧱 Tech Stack
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      GeoSentinel MLOps                          │
+├─────────────────────────────────────────────────────────────────┤
+│  PHASE 1 — Data Pipeline                                        │
+│  AWS S3 (sentinel-cogs) → B04+B08 bands → NDVI computation     │
+│  DVC versioning | Airflow DAG (daily @ 06:00 UTC)              │
+├─────────────────────────────────────────────────────────────────┤
+│  PHASE 2 — Model Training                                       │
+│  19 scenes → 7 NDVI features → Isolation Forest model          │
+│  MLflow experiment tracking | Model Registry (Staging)          │
+├─────────────────────────────────────────────────────────────────┤
+│  PHASE 3 — Serving                                              │
+│  FastAPI REST API → Docker → Helm chart → Kubernetes (kind)    │
+│  Endpoints: /health /model/info /predict /predict/batch         │
+├─────────────────────────────────────────────────────────────────┤
+│  PHASE 4 — Monitoring & Auto-Retraining                         │
+│  Evidently AI drift reports | Prometheus /metrics endpoint      │
+│  Grafana dashboard | Auto-retrain Airflow DAG (weekly)          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Tech Stack
 
 | Layer | Tool |
 |---|---|
 | Data Source | AWS Open Data Registry (Sentinel-2 L2A COGs) |
 | Data Versioning | DVC |
-| Experiment Tracking | MLflow |
+| Experiment Tracking | MLflow 3.11.1 |
 | Model Registry | MLflow Model Registry |
 | Pipeline Orchestration | Apache Airflow 2.10.4 |
 | Model Serving | FastAPI + Docker |
 | Infrastructure | Kubernetes (kind → Oracle Cloud free tier) |
-| IaC | Terraform |
-| CI/CD | GitHub Actions |
+| IaC | Terraform + Helm |
 | Drift Monitoring | Evidently AI |
-| Observability | Grafana + Prometheus |
+| Metrics | Prometheus + Grafana |
 | Language | Python 3.12 |
 
 ---
 
-## 🗂️ Repository Structure
+## Repository Structure
 
 ```
 geosentinel-mlops/
 ├── src/
 │   ├── ingestion/
-│   │   ├── auth.py             # OAuth2 token generation (CDSE)
-│   │   ├── search.py           # OData catalog search with filters
-│   │   ├── download_aws.py     # Band downloader via AWS Open Data (no auth)
-│   │   ├── compute_ndvi.py     # NDVI computation from B04/B08 bands (COG overview)
-│   │   └── bulk_download.py    # Parameterised bulk scene downloader
+│   │   ├── auth.py              # OAuth2 token generation (CDSE)
+│   │   ├── search.py            # OData catalog search
+│   │   ├── download_aws.py      # Sentinel-2 band downloader (AWS, no auth)
+│   │   ├── compute_ndvi.py      # NDVI computation via COG overviews
+│   │   └── bulk_download.py     # Parameterised bulk scene downloader
 │   ├── training/
-│   │   ├── features.py         # Feature extraction from NDVI stats JSON
-│   │   ├── train.py            # Isolation Forest + MLflow experiment tracking
-│   │   └── promote_model.py    # Promote model version to Staging/Production
-│   ├── serving/                # FastAPI model serving endpoint (Phase 3)
-│   └── monitoring/             # Drift detection & alerting (Phase 4)
+│   │   ├── features.py          # NDVI stats → 7-feature vector
+│   │   ├── train.py             # Isolation Forest + MLflow tracking
+│   │   └── promote_model.py     # Promote model to Staging/Production
+│   ├── serving/
+│   │   └── app.py               # FastAPI endpoint + Prometheus metrics
+│   └── monitoring/
+│       ├── drift_detector.py    # Evidently AI drift detection
+│       └── metrics.py           # Prometheus metric definitions
 ├── airflow/
 │   └── dags/
-│       └── sentinel2_pipeline.py  # Scheduled NDVI pipeline DAG
+│       ├── sentinel2_pipeline.py   # Daily data ingestion DAG
+│       └── retrain_pipeline.py     # Weekly auto-retraining DAG
 ├── data/
-│   ├── raw/                    # Downloaded GeoTIFF bands (DVC-tracked)
-│   ├── processed/              # NDVI stats JSON files (19 scenes)
-│   └── versioned/              # DVC metadata
-├── mlflow/                     # MLflow tracking DB + artifacts
-├── models/                     # Scene predictions + feature stats JSON
+│   ├── raw/                     # Downloaded GeoTIFF bands (DVC-tracked)
+│   ├── processed/               # NDVI stats JSON files (19 scenes)
+│   └── drift_reports/           # Evidently HTML + JSON reports
+├── mlflow/                      # MLflow tracking SQLite DB
+├── mlruns/                      # MLflow artifact storage
+├── models/                      # Scene predictions + feature stats
 ├── infra/
-│   ├── helm/                   # Kubernetes Helm charts (Phase 3)
-│   └── terraform/              # Infrastructure as Code (Phase 3)
-├── notebooks/                  # Exploratory analysis
-├── tests/                      # Unit + integration tests
-├── docs/                       # Architecture diagrams, decisions
-├── .env.example                # Credential template (never commit .env)
-└── requirements.txt
+│   ├── helm/geosentinel/        # Kubernetes Helm chart
+│   ├── prometheus/              # Prometheus scrape config
+│   └── grafana/                 # Grafana datasource + dashboard provisioning
+├── Dockerfile                   # Single-stage Python 3.12 image
+├── docker-compose.yml           # Full stack: API + Prometheus + Grafana
+├── requirements.txt             # Development dependencies
+├── requirements-serving.txt     # Production serving dependencies
+└── .env.example                 # Credential template
 ```
 
 ---
 
 ## 🗓️ Development Journal
 
-### ✅ Day 1 — April 22, 2026
+### Day 1 — April 22, 2026
+**Goal:** Research, planning, project bootstrap.
 
-**Session Goal:** Research, planning, and project bootstrap.
-
-**What I did:**
-
-**1. Research & Direction Setting**
-- Investigated current state of AI/ML impact on DevOps and Platform Engineering roles
-- Key finding: AI is not replacing DevOps — it is reshaping it toward higher-level roles. The real opportunity is **MLOps** — bridging infrastructure expertise with ML system deployment
-- Decided on transition path: DevOps/Platform Engineer → MLOps / AI Infrastructure Engineer
-
-**2. Project Design**
-- Designed the GeoSentinel-MLOps project: end-to-end MLOps pipeline for Sentinel-2 vegetation anomaly detection
-- Chose NDVI anomaly detection: familiar data format, natural concept drift, simple model, real-world story
-
-**3. Credentials & API Setup**
-- Created Copernicus Data Space Ecosystem account
-- Generated S3 credentials (12 TB/month free quota)
-- Understood two auth methods: OAuth2 Bearer token and S3 keys
-
-**4. Repository Setup**
-- Created `geosentinel-mlops` GitHub repository (public, MIT license)
-- Launched GitHub Codespace, set up folder structure
+- Researched AI/ML impact on DevOps roles — decided on MLOps transition path
+- Designed GeoSentinel-MLOps: NDVI anomaly detection leveraging ESA background
+- Created GitHub repo, launched Codespace, set up folder structure
 - Fixed branch naming: `Main` → `main`
+- Written: `auth.py`, `search.py`, `download.py`
+- **Key learning:** CDSE replaced SciHub. OData spatial queries use `OData.CSC.Intersects`
 
-**5. Code Written**
-
-`src/ingestion/auth.py` — OAuth2 token generation  
-`src/ingestion/search.py` — OData catalog search  
-`src/ingestion/download.py` — Streaming product download
-
-**Key Learnings:** CDSE replaced SciHub. OData spatial queries use `OData.CSC.Intersects`. Cloud cover filter requires nested `Attributes/OData.CSC.DoubleAttribute/any(...)`.
-
-**Commit:** `feat: Phase 1 - Sentinel-2 ingestion pipeline (auth, search, download)`
+**Commit:** `feat: Phase 1 - Sentinel-2 ingestion pipeline`
 
 ---
 
-### ✅ Day 2 — May 4, 2026
+### Day 2 — May 4, 2026
+**Goal:** Complete Phase 1 — automated, versioned satellite data pipeline.
 
-**Session Goal:** Complete Phase 1 — working, scheduled, versioned satellite data pipeline.
+- CDSE OData API returned 403 — `sentinelsat` library uses deprecated SciHub endpoint
+- Switched to **AWS Open Data Registry** (`sentinel-cogs` bucket) — no auth, same data
+- Written: `download_aws.py` — lists and downloads B04+B08 bands (~20MB vs 800MB full zip)
+- Written: `compute_ndvi.py` — COG overview reading at 1/10 resolution (5MB RAM vs 460MB)
+- Written: `sentinel2_pipeline.py` Airflow DAG — `download_bands → compute_ndvi → version_data`
+- First NDVI result: Frankfurt June 2024 — Mean=0.0276, Vegetation=0.6%, Soil=87.3%
+- Fixed: Airflow `db init` → `db migrate`, pydantic-core conflict, DVC fsspec conflict
 
-**What I did:**
+**All 3 DAG tasks green on first test run**
 
-**1. Debugging CDSE API Access**
-- Hit 403 Forbidden on both OData API and `sentinelsat` library
-- Root cause: `sentinelsat` uses deprecated SciHub/OpenSearch endpoint
-- Decision: switched to **AWS Open Data Registry** — Sentinel-2 L2A on `sentinel-cogs` bucket, no auth needed
-
-**2. AWS Open Data Downloader**
-
-`src/ingestion/download_aws.py` — lists and downloads B04+B08 bands via anonymous S3. ~20MB per scene vs 800MB full zip.
-
-**3. NDVI Computation**
-
-`src/ingestion/compute_ndvi.py` — computes NDVI, saves GeoTIFF + stats JSON.
-
-First result (Frankfurt, June 2, 2024):
-```
-Mean NDVI  : 0.0276  |  Vegetation: 0.6%  |  Bare soil: 87.3%
-```
-Expected for early June before crops develop.
-
-**4. Airflow DAG**
-
-`airflow/dags/sentinel2_pipeline.py` — three tasks: `download_bands → compute_ndvi → version_data`. Scheduled daily at 06:00 UTC. All 3 tasks green on first test run.
-
-**5. Infrastructure Fixes**
-- Airflow `db init` deprecated → switched to `airflow db migrate`
-- Fixed `typing_extensions` / `pydantic-core` conflict
-- Fixed `fsspec` / DVC conflict
-- Switched Claude Code from free to paid account in Codespace
-
-**Key Learnings:** Airflow 2.10.4 = first version with full Python 3.12 support. XCom passes data between tasks via `ti.xcom_push()` / `ti.xcom_pull()`.
-
-**Commit:** `feat: Phase 1 complete - Airflow DAG for Sentinel-2 NDVI pipeline`
+**Commit:** `feat: Phase 1 complete - Airflow DAG, NDVI pipeline, DVC tracking`
 
 ---
 
-### ✅ Day 3 — May 5, 2026
+### Day 3 — May 5, 2026
+**Goal:** Phase 2 — MLflow experiment tracking, anomaly detection model.
 
-**Session Goal:** Complete Phase 2 — MLflow experiment tracking, anomaly detection model trained and registered.
+- Written: `features.py` — 7-feature vector from NDVI stats JSON
+- **Run 1** (1 scene): Score=0.0 — not enough data
+- Memory issue: 10980×10980 pixels × 146MB/band = Codespace crash
+  - Fix: COG overview levels — `rasterio out_shape` downsamples to 1/10 resolution
+- Written: `bulk_download.py` — fully parameterised (`--year`, `--months`, `--scenes-per-month`, `--utm-zone`)
+- Downloaded 20 scenes: May–September 2024, tile 32/U/MA (Frankfurt)
+- **Run 2** (19 scenes): 1 anomaly flagged — `S2A_32UMA_20240605_0_L2A` (score: -0.0062)
+- Written: `promote_model.py` — parameterised staging with before/after version table
+- MLflow UI launched at port 5000 via Codespace port forwarding
 
-**What I did:**
-
-**1. Feature Extraction**
-
-Written: `src/training/features.py`
-- Converts NDVI stats JSON → 7-feature numpy vector
-- Features: `ndvi_mean`, `ndvi_std`, `ndvi_min`, `ndvi_max`, `vegetation_pct`, `water_pct`, `bare_soil_pct`
-- `load_all_features()` loads all JSON files in `data/processed/` into a feature matrix
-
-**2. First Training Run (1 scene)**
-- Trained Isolation Forest on 1 scene — score was 0.0 (expected, can't detect anomalies with 1 data point)
-- MLflow run `4a9f90fd` created, model registered as **Version 1**
-
-**3. Memory Issue + Fix**
-- Bulk downloading 20 full-resolution scenes terminated the Codespace (146MB per band × 2 = 460MB per scene)
-- Fix: updated `compute_ndvi.py` to read at 1/10 resolution using **COG overview levels**
-- `rasterio` `out_shape` parameter reads a downsampled version — ~5MB per scene, same statistical accuracy
-
-**4. Bulk Download**
-
-Written: `src/ingestion/bulk_download.py`
-- Fully parameterised: `--year`, `--months`, `--scenes-per-month`, `--utm-zone`, `--lat-band`, `--square`
-- Skip-if-exists logic, progress summary, error handling per scene
-- Downloaded 20 scenes: May–September 2024, 4 per month, tile 32/U/MA (Frankfurt)
-
-```bash
-python src/ingestion/bulk_download.py \
-  --year 2024 --months 5 6 7 8 9 --scenes-per-month 4
+**Model Registry:**
+```
+Version 1 → Archived  (1 scene, outdated)
+Version 2 → Staging   (19 scenes, current)
 ```
 
-Result: 18 completed, 2 skipped (already existed), 0 failed.
-
-**5. Second Training Run (19 scenes)**
-
-MLflow run `555c4341` — trained on 19 scenes:
-
-```
-Scenes trained on : 19
-Normal scenes     : 18
-Anomalies flagged : 1  (5.3%)
-Mean score        : 0.044396
-
-🚨 S2A_32UMA_20240605_0_L2A: score=-0.0062  ← anomaly
-✅ 18 other scenes: scores 0.0007 to 0.1131
-```
-
-The June 5 scene was flagged as anomalous — its NDVI feature vector was the most isolated point in the 7-dimensional feature space.
-
-**6. MLflow Model Registry**
-
-```
-Version 1  →  Archived    (1 scene, outdated)
-Version 2  →  Staging     (19 scenes, current candidate)
-```
-
-Written: `src/training/promote_model.py`
-- Parameterised: `--version`, `--stage`
-- Shows before/after version table with stage icons
-- Promotes with `archive_existing_versions=True`
-
-**7. MLflow UI**
-- Launched at `localhost:5000` via Codespace port forwarding
-- Experiment `geosentinel-ndvi-anomaly` visible with both runs
-- Model registry shows Version 1 (Archived) and Version 2 (Staging)
-
-**Key Learnings:**
-- COG overview levels are the correct approach for memory-efficient satellite data processing — always downsample for statistics, only use full resolution for visual output
-- Isolation Forest `contamination` parameter = expected anomaly fraction — set to 0.05 (5%) based on domain knowledge
-- MLflow `transition_model_version_stage` is deprecated in 2.9.0+ — will migrate to aliases (`@champion`, `@challenger`) in Phase 4
-- Negative anomaly score = most isolated point in feature space = genuine outlier
-- 1 scene is not enough to train any anomaly model — minimum ~10 needed for meaningful results
-
-**Files committed:**
-```
-src/training/features.py
-src/training/train.py
-src/training/promote_model.py
-src/ingestion/bulk_download.py
-src/ingestion/compute_ndvi.py  (updated: COG overview reading)
-mlflow/mlflow.db
-models/scene_predictions.json
-models/feature_stats.json
-```
+**Key learning:** MLflow `transition_model_version_stage` deprecated in 2.9.0 — will migrate to aliases in next iteration. Negative anomaly score = most isolated point in feature space.
 
 **Commit:** `feat: Phase 2 complete - MLflow tracking, 19-scene anomaly model v2 in Staging`
 
 ---
 
-**⏭️ Next Session (Day 4 — Phase 3 begins):**
-- Write `src/serving/app.py` — FastAPI endpoint wrapping the Production model
-- `POST /predict` accepts NDVI features, returns anomaly score + label
-- Containerise with Docker
-- Write Helm chart for Kubernetes deployment
-- Deploy locally with `kind`
+### Day 4 — May 6, 2026
+**Goal:** Phase 3 + Phase 4 — serving, monitoring, auto-retraining.
+
+**Phase 3 — FastAPI + Docker + Helm:**
+- Written: `src/serving/app.py` — FastAPI with `/health`, `/model/info`, `/predict`, `/predict/batch`, `/metrics`, `/drift/check`
+- Containerised with Docker (single-stage, non-root user, healthcheck)
+- Fixed: `pkg_resources` missing → added `setuptools==69.5.1`
+- Fixed: MLflow DB version mismatch → matched container to Codespace version (`mlflow==3.11.1`)
+- Fixed: sklearn version mismatch (`1.8.0` vs `1.5.0`) — warnings only, not breaking
+- Fixed: `mlruns/` not mounted → added second volume mount
+- Written: Helm chart (`infra/helm/geosentinel/`) — Deployment, Service, PVC templates
+
+**Phase 4 — Monitoring:**
+- Written: `drift_detector.py` — Evidently AI drift reports with HTML + JSON output
+- Written: `metrics.py` — Prometheus counters, histograms, gauges
+- Updated `app.py` — `/metrics` endpoint, `/drift/check` API endpoint
+- Written: `docker-compose.yml` — API + Prometheus + Grafana full stack
+- Fixed: data volume mount path (`/workspaces/...` → `/app/data`)
+- Fixed: `docker-compose.yml` version attribute obsolete → removed
+
+**Drift check result:**
+```json
+{
+  "drift_score": 0.1429,
+  "is_drifted": false,
+  "drifted_features": ["ndvi_max"],
+  "n_reference": 13,
+  "n_current": 6
+}
+```
+
+**Auto-retraining DAG:**
+- Written: `retrain_pipeline.py` — BranchPythonOperator with drift threshold
+- Flow: `check_drift → [drift≥0.3] → download_new_data → retrain → promote_model`
+- Flow: `check_drift → [drift<0.3] → no_retraining_needed`
+- Schedule: weekly on Mondays @ 08:00 UTC
+- Test run: correctly branched to `no_retraining_needed` (score 0.1429 < threshold 0.3)
+
+**Metrics confirmed working:**
+```
+geosentinel_predictions_total{result="normal"} 10.0
+geosentinel_prediction_latency_seconds_count 10.0
+geosentinel_model_version 2.0
+geosentinel_drift_score 0.1429
+```
+
+**Key learnings:**
+- Docker volume mounts must match exactly the path the application resolves — use `docker exec` to debug
+- COG overview levels are the correct pattern for memory-efficient satellite data statistics
+- Evidently `DataDriftPreset` requires minimum 4 samples in both reference and current sets
+- MLflow model artifacts path (`mlruns/`) must be mounted separately from the tracking DB (`mlflow/`)
+- `BranchPythonOperator` is the right Airflow pattern for conditional pipeline branching
+
+**Files committed:**
+```
+src/serving/app.py          src/monitoring/drift_detector.py
+src/monitoring/metrics.py   airflow/dags/retrain_pipeline.py
+docker-compose.yml          Dockerfile
+requirements-serving.txt    infra/helm/geosentinel/
+infra/prometheus/           infra/grafana/
+```
+
+**Commit:** `feat: project complete - auto-retraining DAG, drift detection, full MLOps stack`
 
 ---
 
-## 🗺️ 16-Week Roadmap
+## Roadmap
 
-| Phase | Weeks | Goal | Status |
-|---|---|---|---|
-| 1 — Data Foundation | 1–3 | Automated, versioned data pipeline | ✅ Complete |
-| 2 — Model Training | 4–6 | Reproducible experiments with MLflow | ✅ Complete |
-| 3 — K8s Deployment | 7–9 | Model served as REST API on Kubernetes | 🟡 In Progress |
-| 4 — Monitoring | 10–12 | Drift detection + automated retraining | ⬜ Not Started |
-| 5 — Portfolio Polish | 13–16 | Docs, demo video, blog post | ⬜ Not Started |
+| Phase | Goal | Status |
+|---|---|---|
+| 1 — Data Foundation | Automated, versioned data pipeline | Complete |
+| 2 — Model Training | Reproducible experiments with MLflow | Complete |
+| 3 — K8s Deployment | Model served as REST API on Kubernetes | Complete |
+| 4 — Monitoring | Drift detection + automated retraining | Complete |
+| 5 — Portfolio Polish | Docs, demo video, blog post | In Progress |
 
 ---
 
-## 🚀 Getting Started
+## Model Performance
+
+| Run | Scenes | Anomalies | Mean Score | Status |
+|---|---|---|---|---|
+| `4a9f90fd` | 1 | 0 (0%) | 0.000 | Archived |
+| `555c4341` | 19 | 1 (5.3%) | 0.044 | **Staging** |
+
+**Flagged scene:** `S2A_32UMA_20240605_0_L2A` — June 5, 2024 (anomaly score: -0.0062)
+
+---
+
+## Getting Started
 
 ### Prerequisites
 - Python 3.12+
-- GitHub Codespaces or local Docker
+- Docker
+- GitHub Codespaces or local environment
 
-### Setup
+### Quick Start
 
 ```bash
-# 1. Clone the repository
+# 1. Clone
 git clone https://github.com/riyabhattacharjee123/geosentinel-mlops.git
 cd geosentinel-mlops
 
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Download Sentinel-2 bands (no credentials needed)
-python src/ingestion/bulk_download.py --year 2024 --months 5 6 7 8 9 --scenes-per-month 4
+# 3. Download 20 Sentinel-2 scenes (no credentials needed)
+python src/ingestion/bulk_download.py \
+  --year 2024 --months 5 6 7 8 9 --scenes-per-month 4
 
 # 4. Train the anomaly detection model
 python src/training/train.py
 
-# 5. View experiments in MLflow UI
-mlflow ui --backend-store-uri sqlite:////workspaces/geosentinel-mlops/mlflow/mlflow.db
+# 5. Promote model to Staging
+python src/training/promote_model.py --version 2 --stage Staging
 
-# 6. Run the full pipeline via Airflow
+# 6. Start the full stack (API + Prometheus + Grafana)
+docker compose up
+
+# 7. Test the API
+curl http://localhost:8000/health
+curl http://localhost:8000/docs      # Swagger UI
+
+# 8. Run drift detection
+curl -X POST http://localhost:8000/drift/check
+
+# 9. View dashboards
+# Prometheus: http://localhost:9090
+# Grafana:    http://localhost:3000  (admin / geosentinel)
+```
+
+### Run the Airflow pipelines
+
+```bash
 export AIRFLOW_HOME=/workspaces/geosentinel-mlops/airflow
 export AIRFLOW__CORE__DAGS_FOLDER=/workspaces/geosentinel-mlops/airflow/dags
 export AIRFLOW__CORE__LOAD_EXAMPLES=False
 airflow db migrate
+
+# Daily data pipeline
 airflow dags test sentinel2_ndvi_pipeline $(date +%Y-%m-%d)
+
+# Weekly auto-retraining check
+airflow dags test geosentinel_auto_retrain $(date +%Y-%m-%d)
 ```
 
 ---
 
-## 📊 Model Performance
+## API Reference
 
-| Run | Scenes | Anomalies | Mean Score | Status |
-|---|---|---|---|---|
-| `4a9f90fd` | 1 | 0 | 0.000 | Archived |
-| `555c4341` | 19 | 1 (5.3%) | 0.044 | **Staging** |
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Liveness check |
+| `/model/info` | GET | Current model version + metadata |
+| `/predict` | POST | Single scene anomaly detection |
+| `/predict/batch` | POST | Multiple scenes at once |
+| `/metrics` | GET | Prometheus metrics |
+| `/drift/check` | POST | Run Evidently drift report |
+| `/docs` | GET | Interactive Swagger UI |
 
-**Flagged scene:** `S2A_32UMA_20240605_0_L2A` — June 5, 2024 (score: -0.0062)
+**Example prediction:**
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scene": "S2A_32UMA_20240605_0_L2A",
+    "ndvi_mean": 0.027, "ndvi_std": 0.049,
+    "ndvi_min": -0.250, "ndvi_max": 0.812,
+    "vegetation_pct": 0.62, "water_pct": 8.15,
+    "bare_soil_pct": 87.25
+  }'
+```
+
+```json
+{
+  "scene": "S2A_32UMA_20240605_0_L2A",
+  "prediction": "anomaly",
+  "anomaly_score": -0.0062,
+  "is_anomaly": true,
+  "model_version": "2",
+  "model_stage": "Staging"
+}
+```
 
 ---
 
-## 📚 Resources
+## Resources
 
 - [AWS Open Data — Sentinel-2 COGs](https://registry.opendata.aws/sentinel-2-l2a-cogs/)
+- [Copernicus Data Space Documentation](https://documentation.dataspace.copernicus.eu/)
 - [MLflow Documentation](https://mlflow.org/docs/latest/index.html)
 - [Evidently AI Documentation](https://docs.evidentlyai.com/)
 - [Apache Airflow Documentation](https://airflow.apache.org/docs/)
 - [DVC Documentation](https://dvc.org/doc)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
 
 ---
 
-## 👤 Author
+## Author
 
-**Ree** — DevOps/Platform Engineer @ ESA  
-Transitioning into MLOps/AI Infrastructure Engineering by December 2026  
-📍 Frankfurt/Darmstadt, Germany
+**Riya** — DevOps/Platform Engineer
+ Frankfurt/Darmstadt, Germany
 
 ---
-
-*This project is part of a self-directed learning journey toward Platform/MLOps Engineering.*
